@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "id": "pvz-content-mod",
+  "version": "1.0.0",
+  "name": "PvZ Content Mod",
+  "description": "Two custom plants (Sniper Pea, Sun Orchid) and one custom zombie (Bulwark Zombie), registered through the pvz-fabric content API with their own stats, packet art and behaviour hooks.",
+  "authors": [
+    "PvZ Fabric"
+  ],
+  "license": "MIT",
+  "environment": "*",
+  "entrypoints": {
+    "main": [
+      "cn.enaium.fabricpvz.contentmod.ContentMod"
+    ]
+  },
+  "mixins": [
+    "pvz-content-mod.mixins.json"
+  ],
+  "depends": {
+    "java": ">=25",
+    "fabricloader": ">=0.19.0",
+    "pvz-portable": "*",
+    "api-base": ">=1.0.0",
+    "api-events": ">=1.0.0",
+    "api-plant": ">=1.0.0",
+    "api-zombie": ">=1.0.0"
+  }
+}
