@@ -1,6 +1,7 @@
 package cn.enaium.fabricpvz.contentmod;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
@@ -20,9 +21,10 @@ import java.util.jar.JarFile;
 import java.util.stream.Collectors;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
-import cn.enaium.fabricpvz.portable.lawn.HelmType;
 import cn.enaium.fabricpvz.portable.lawn.PlantSubClass;
+import cn.enaium.fabricpvz.portable.lawn.ProjectileType;
 import cn.enaium.fabricpvz.portable.lawn.ReanimationType;
+import cn.enaium.fabricpvz.portable.lawn.SeedType;
 
 /**
  * End-to-end verification of the content mod on the real Fabric Loader.
@@ -32,7 +34,7 @@ import cn.enaium.fabricpvz.portable.lawn.ReanimationType;
  * second JVM with the game, the loader (plus Mixin and ASM, pulled in by
  * {@code cn.enaium.fabricpvz:fabric-provider}) and the API modules on the class path. The loader
  * finds the game through the provider's {@code GameProvider}, resolves the mod, runs its
- * {@code ModInitializer}, registers its Mixin configuration and only then calls the game entry point
+ * {@code ModInitializer}, applies the API modules' Mixin configurations and only then calls the game entry point
  * - which this test redirects to {@link cn.enaium.fabricpvz.contentmod.test.ContentModGameMain} with
  * {@code -Dpvz.game.mainClass}.
  *
@@ -53,7 +55,7 @@ class ContentModEndToEndTest {
     /** Mod ids that must be resolved next to this mod, i.e. the game and the API modules. */
     private static final List<String> DEPENDENCY_MODS = List.of(
             "fabricloader", "pvz-portable",
-            "fabric-api", "api-base", "api-events", "api-plant", "api-zombie");
+            "fabric-api", "api-base", "api-events", "api-plant", "api-resource", "api-zombie");
 
     @TempDir
     Path tmp;
@@ -75,10 +77,27 @@ class ContentModEndToEndTest {
         int exitCode = launch(mods, runDir, report, output);
         assertEquals(0, exitCode, "Fabric Loader must boot the game with the mod: " + failureMessage(output, report));
 
+        // Keep the packet dump the harness wrote next to its report: it is the only artifact that
+        // shows what a seed packet of this mod actually looks like (build/packet-dump/*.png).
+        Path aDump = report.getParent().resolve("packet-dump");
+        if (Files.isDirectory(aDump)) {
+            Path aTarget = Path.of("build", "packet-dump");
+            try (var aFiles = Files.walk(aDump)) {
+                for (Path aFile : aFiles.filter(Files::isRegularFile).toList()) {
+                    Files.createDirectories(aTarget);
+                    Files.copy(aFile, aTarget.resolve(aFile.getFileName()),
+                            java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                }
+            }
+        }
+
         Map<String, String> values = readReport(report);
 
         // 1) The loader resolved the game, the API modules and this mod jar.
-        assertEquals("1.0.0", values.get("gameVersion"), "the provider must report the game's version");
+        //    The workspace releases every artifact under one version, so these two assert what the
+        //    provider and the API report against what the loader resolved, not a hard-coded number.
+        assertEquals(values.get("gameVersionByLoader"), values.get("gameVersion"),
+                "the provider must report the version of the game it resolved");
         assertEquals("client", values.get("environment"));
         assertEquals("true", values.get("contentModLoaded"));
         for (String id : DEPENDENCY_MODS) {
@@ -87,152 +106,383 @@ class ContentModEndToEndTest {
         }
         assertEquals("true", values.get("contentModEntrypointRan"), "the mod's ModInitializer must have run");
         assertEquals("true", values.get("apiInitialized"), "the API entry point must run before the game");
-        assertEquals("1.0.0", values.get("apiVersion"));
+        assertEquals(values.get("apiVersionByLoader"), values.get("apiVersion"),
+                "the API must report the version the loader resolved");
 
-        // 2) Both plants and the zombie are registered through the public API and the game's own
-        //    definition tables report the registered stats.
-        assertEquals("2", values.get("plantsRegistered"));
-        assertEquals("1", values.get("zombiesRegistered"));
-        assertEquals("true", values.get("sniperPeaRegistered"));
-        assertEquals("true", values.get("sunOrchidRegistered"));
-        assertEquals("true", values.get("bulwarkZombieRegistered"));
+        // 2) The three plants are registered through the public API and the game's own definition table
+        //    reports the registered stats.
+        assertEquals("3", values.get("plantsRegistered"));
+        assertEquals("0", values.get("zombiesRegistered"), "this mod registers no zombie any more");
+        assertEquals("true", values.get("redPeashooterRegistered"));
         assertEquals("true", values.get("seedTypesOutsideUpstream"));
-        assertEquals("true", values.get("zombieTypeOutsideUpstream"));
+        assertEquals(String.valueOf(SeedType.SEED_SNOWPEA), values.get("redPeashooterUnlockSeed"),
+                "the plant must be gated behind the Snow Pea's award");
 
-        assertEquals("200", values.get("sniperPeaDefinitionCost"));
-        assertEquals("750", values.get("sniperPeaDefinitionRefresh"));
-        assertEquals("100", values.get("sniperPeaDefinitionLaunchRate"), "the Sniper Pea fires faster");
-        assertEquals(String.valueOf(ReanimationType.REANIM_PEASHOOTER), values.get("sniperPeaDefinitionReanim"));
-        assertEquals(String.valueOf(PlantSubClass.SUBCLASS_SHOOTER), values.get("sniperPeaDefinitionSubclass"));
-        assertEquals("Sniper Pea", values.get("sniperPeaName"));
-        assertEquals("Fires hardened peas down the whole lane.", values.get("sniperPeaTooltip"));
-        assertTrue(values.get("sniperPeaAlmanac").startsWith("Sniper Pea is a marksman."),
-                "almanac text, got " + values.get("sniperPeaAlmanac"));
+        assertEquals("175", values.get("redPeashooterDefinitionCost"), "the registered sun cost");
+        assertEquals("750", values.get("redPeashooterDefinitionRefresh"));
+        assertEquals("150", values.get("redPeashooterDefinitionLaunchRate"), "the peashooter's cadence");
+        assertEquals(String.valueOf(ReanimationType.REANIM_PEASHOOTER), values.get("redPeashooterDefinitionReanim"));
+        assertEquals(String.valueOf(PlantSubClass.SUBCLASS_SHOOTER), values.get("redPeashooterDefinitionSubclass"));
+        assertEquals("Red Peashooter", values.get("redPeashooterName"));
+        assertEquals("Fires burning peas instead of plain ones.", values.get("redPeashooterTooltip"));
 
-        assertEquals("25", values.get("sunOrchidDefinitionCost"));
-        assertEquals("2500", values.get("sunOrchidDefinitionLaunchRate"));
-        assertEquals(String.valueOf(ReanimationType.REANIM_SUNFLOWER), values.get("sunOrchidDefinitionReanim"));
-        assertEquals("Sun Orchid", values.get("sunOrchidName"));
-        assertTrue(values.get("sunOrchidAlmanac").startsWith("Sun Orchid is a bargain:"),
-                "almanac text, got " + values.get("sunOrchidAlmanac"));
+        // The two plants added next to it: the repeater's and the gatling pea's own stats with the
+        // mod's costs, and their burst.
+        assertEquals("true", values.get("redRepeaterRegistered"));
+        assertEquals(String.valueOf(SeedType.SEED_REPEATER), values.get("redRepeaterUnlockSeed"),
+                "the repeater twin is gated behind the adventure's own Repeater");
+        assertEquals("225", values.get("redRepeaterDefinitionCost"));
+        assertEquals("750", values.get("redRepeaterDefinitionRefresh"), "the repeater's own recharge");
+        assertEquals("150", values.get("redRepeaterDefinitionLaunchRate"));
+        assertEquals(String.valueOf(ReanimationType.REANIM_REPEATER), values.get("redRepeaterDefinitionReanim"));
+        assertEquals("2", values.get("redRepeaterBurst"));
+        assertEquals("Red Repeater", values.get("redRepeaterName"));
 
-        assertEquals("Bulwark Zombie", values.get("bulwarkName"));
-        assertTrue(values.get("bulwarkAlmanac").startsWith("Bulwark Zombie wears a pail"),
-                "almanac text, got " + values.get("bulwarkAlmanac"));
-        assertEquals("3", values.get("bulwarkValue"), "the registered wave cost");
-        assertEquals("1", values.get("bulwarkStartingLevel"));
-        assertEquals("1", values.get("bulwarkFirstAllowedWave"));
-        assertEquals("2000", values.get("bulwarkPickWeight"));
+        assertEquals("true", values.get("redGatlingRegistered"));
+        assertEquals(String.valueOf(SeedType.SEED_GATLINGPEA), values.get("redGatlingUnlockSeed"),
+                "the gatling twin is gated behind the shop's Gatling Pea");
+        assertEquals("275", values.get("redGatlingDefinitionCost"));
+        assertEquals("5000", values.get("redGatlingDefinitionRefresh"), "the gatling pea's own recharge");
+        assertEquals("150", values.get("redGatlingDefinitionLaunchRate"));
+        assertEquals(String.valueOf(ReanimationType.REANIM_GATLINGPEA), values.get("redGatlingDefinitionReanim"));
+        assertEquals("4", values.get("redGatlingBurst"));
+        assertEquals("Red Gatling Pea", values.get("redGatlingName"));
 
         // Upstream content is untouched.
         assertEquals("100", values.get("peashooterDefinitionCost"));
         assertEquals("150", values.get("peashooterDefinitionLaunchRate"));
-        assertEquals("1", values.get("normalZombieAllowed"));
+        assertEquals("175", values.get("snowPeaDefinitionCost"));
+        assertEquals("200", values.get("repeaterDefinitionCost"));
+        assertEquals("750", values.get("repeaterDefinitionRefresh"));
+        assertEquals("250", values.get("gatlingDefinitionCost"));
+        assertEquals("5000", values.get("gatlingDefinitionRefresh"));
 
-        // 3) The mod's art: both packet images came out of the mod jar, are in the game's resource
-        //    table, and the mod's Mixin put them back after a resource group load clobbered them.
+        // 3) The mod's art, drawn at the seed chooser's moment: the icon is the retail twin's packet
+        //    art re-mapped to red, it reaches the game through the plants' art supplier, and the game
+        //    really draws it - with no board and no tick behind it (docs/VERIFICATION.md §53).
         assertEquals("none", values.get("assetLoadError"));
-        assertEquals("true", values.get("packetArtBound"), "the packet art must be bound on startup");
-        assertEquals("72x70", values.get("sniperPeaPacketSize"));
-        assertEquals("72x70", values.get("sunOrchidPacketSize"));
-        assertEquals("53x63", values.get("zombieTorsoSize"));
-        assertTrue(values.get("sniperPeaPacketCentrePixel").startsWith("0x"),
-                "the packet image must hold real pixels, got " + values.get("sniperPeaPacketCentrePixel"));
-        assertEquals("true", values.get("sniperPeaPacketSlotIsImage"));
-        assertEquals("true", values.get("sunOrchidPacketSlotIsImage"));
-        assertEquals("218", values.get("sniperPeaPacketSlot"));
-        assertEquals("226", values.get("sunOrchidPacketSlot"));
-        assertEquals("false", values.get("packetArtBoundAfterClobber"), "the simulated group load wipes it");
-        assertTrue(Integer.parseInt(values.get("mixinCallbacks")) >= 1,
-                "the mod's ResourcesMixin must have been applied to the game class, got "
-                        + values.get("mixinCallbacks"));
-        assertEquals("true", values.get("packetArtBoundAfterGroupLoad"),
-                "the mixin must re-install the packet art after a resource group load");
-        assertEquals("true", values.get("packetArtBoundAfterTickHook"),
-                "the LawnEvents.TICK safety net must restore the art too");
 
-        if (Boolean.parseBoolean(values.get("assetsPresent"))) {
-            assertEquals("true", values.get("retailPeaSplatsInPak"),
-                    "the Sniper Pea's packet slot must be a real retail resource");
-            assertEquals("true", values.get("retailPotatomineParticlesInPak"),
-                    "the Sun Orchid's packet slot must be a real retail resource");
+        // The purple (upgrade) packet is the game's own reaction to Plant::IsUpgrade, which the API's
+        // PlantMixin routes to the registration: the gatling twin declares it, the peashooter twin does
+        // not, and the shop plant the gatling twin copies is an upgrade too.
+        assertEquals("true", values.get("plantIsUpgradeRedGatling"),
+                "the red gatling pea must use the upgrade (purple) packet");
+        assertEquals("false", values.get("plantIsUpgradeRedRepeater"),
+                "the red repeater is not an upgrade plant");
+        assertEquals("false", values.get("plantIsUpgradeRedPeashooter"));
+        assertEquals("true", values.get("plantIsUpgradeRetailGatling"),
+                "the retail gatling pea is the upgrade plant the red twin copies");
+
+        boolean assetsPresent = Boolean.parseBoolean(values.get("assetsPresent"));
+        if (assetsPresent) {
+            assertEquals("true", values.get("retailPakReadable"),
+                    "the retail archive the packets are drawn from must be readable");
+
+            // The drawn packets: the mod's three come out of the art supplier, so they show the red
+            // plant where the retail twins' own packets - and the packet background - have no red at
+            // all, and the red pixels they show are the ones of the icon the supplier handed over
+            // (nothing else in a packet is red). This is what the bug of §53 fails: with the icon
+            // built by a mechanism that needs a tick, or not handed to the game at all, the packets
+            // carry no red of the mod's making.
+            for (String aTwin : List.of("peashooter", "repeater", "gatling")) {
+                assertEquals("0", values.get("retail_" + aTwin + "PacketRedPixels"),
+                        "a retail peashooter-family packet is green, got "
+                                + values.get("retail_" + aTwin + "PacketRedPixels"));
+                int aIconRed = Integer.parseInt(values.get("red_" + aTwin + "IconRedPixels"));
+                int aPacketRed = Integer.parseInt(values.get("red_" + aTwin + "PacketRedPixels"));
+                assertTrue(aIconRed > 200,
+                        "the red " + aTwin + "'s art supplier must hand the game a red icon, got "
+                                + aIconRed);
+                // The packet is that icon drawn 1:1 over the packet background; only the blended rim
+                // of the icon can fall outside both counts (the background is not red).
+                assertTrue(Math.abs(aIconRed - aPacketRed) <= aPacketRed / 50 + 4,
+                        "the red " + aTwin + "'s packet must be drawn from that icon, got " + aPacketRed
+                                + " red pixels against the icon's " + aIconRed);
+                assertPacketOpaqueNear(values, "red_" + aTwin, "retail_" + aTwin);
+            }
+
+            // The icon itself: the retail peashooter's packet art with its colours re-mapped - same
+            // pixels painted, different colours. A scattered or hand-rendered icon fails the mask
+            // agreement; a copy of the retail art that was not recoloured fails the changed-pixel count.
+            assertEquals("50x70", values.get("packetSize"), "the packet's own cel size");
+            assertEquals("0xFF", values.get("packetPlantPixel").substring(0, 4),
+                    "the icon must hold real, opaque pixels where the plant is, got "
+                            + values.get("packetPlantPixel"));
+            assertEquals(values.get("retailOpaquePixels"), values.get("packetOpaquePixels"),
+                    "the icon must paint exactly the pixels the retail packet art paints");
+            assertEquals("100", values.get("packetMaskAgreementPercent"),
+                    "the icon must be the retail peashooter's packet art, pixel for pixel");
+            assertTrue(Integer.parseInt(values.get("packetRecolouredPixels")) > 200,
+                    "the icon must be recoloured, got " + values.get("packetRecolouredPixels"));
+
+            // A resource group load (or its attempt - the report carries whether the group resolved)
+            // and a board tick take nothing away: the supplier is asked per draw, so the packet is red
+            // again every time.
+            assertTrue(Integer.parseInt(values.get("packetRedPixelsAfterGroupLoad")) > 200,
+                    "the packet must still show the icon after a resource group load, got "
+                            + values.get("packetRedPixelsAfterGroupLoad"));
+            assertTrue(Integer.parseInt(values.get("packetRedPixelsAfterTickHook")) > 200,
+                    "the packet must still show the icon after a board tick, got "
+                            + values.get("packetRedPixelsAfterTickHook"));
         } else {
-            System.out.println("[content-mod-e2e] no retail assets on this machine: the retail archive "
-                    + "check was skipped, the registration and board checks still ran");
+            System.out.println("[content-mod-e2e] no retail assets on this machine: the packet-pixel "
+                    + "checks were skipped, the registration and board checks still ran");
         }
 
-        // 4) A real board: both plants are placeable, have the registered stats and run their hooks.
+        // 4) A real board: the unlock gate, the chooser's second page, and the plant itself.
         assertEquals("1", values.get("boardLevel"));
-        assertEquals("true", values.get("sniperPeaSeedAvailable"), "the seed packet must be usable");
-        assertEquals("true", values.get("sunOrchidSeedAvailable"));
-        assertEquals("true", values.get("plantingRuleAllowsColumn7"));
-        assertEquals("true", values.get("plantingRuleVetoesEntryColumn"),
-                "the Sniper Pea must refuse the column the zombies walk in");
-        assertEquals("true", values.get("plantingRuleLeavesUpstreamAlone"));
+        assertEquals("false", values.get("snowPeaAvailableBefore"),
+                "a first-time player has no Snow Pea yet");
+        assertEquals("true", values.get("redPeashooterLockedBefore"),
+                "the seed must be out of reach while the Snow Pea is");
+        assertEquals("true", values.get("snowPeaAvailableAfter"));
+        assertEquals("true", values.get("redPeashooterUnlockedAfter"),
+                "the Snow Pea's award must unlock the registered seed");
 
-        assertEquals("true", values.get("sniperPeaPlaced"));
-        assertEquals("true", values.get("sniperPeaSeedTypeMatches"));
-        assertEquals("500", values.get("sniperPeaHealth"));
-        assertEquals("500", values.get("sniperPeaMaxHealth"));
-        assertEquals("100", values.get("sniperPeaLaunchRate"));
-        assertEquals("true", values.get("sniperPeaBodyReanimLoaded"));
-        assertEquals("1200", values.get("sniperPeaAttackRect").split(",")[2],
-                "the whole-lane attack rectangle must come from the mod, got "
-                        + values.get("sniperPeaAttackRect"));
+        assertEquals("2", values.get("chooserPages"), "the retail page plus the registered seed's page");
+        assertEquals("0", values.get("chooserPage"), "the chooser opens on the retail page");
+        assertEquals("false", values.get("chooserFirstPageShowsRedPeashooter"));
+        assertEquals("SEED_IN_CHOOSER", values.get("chooserSeedState"));
+        assertEquals("1", values.get("chooserPageAfterSwitch"));
+        assertEquals("true", values.get("chooserSecondPageSlot0IsRedPeashooter"),
+                "the seed must be the first square of the second page");
+        assertEquals("true", values.get("chooserSecondPageSeedSquare"));
+
+        // 4b) The almanac: the plant page is the retail grid plus one page for the registered seed,
+        //     whose card shows the mod's name and description.
+        assertEquals("2", values.get("almanacPlantPages"), "the retail page plus the registered seed's page");
+        assertEquals("0", values.get("almanacPlantPage"), "the almanac opens on the retail page");
+        assertEquals("false", values.get("almanacFirstPageSlot0IsRedPeashooter"),
+                "the peashooter keeps the retail grid's first square");
+        assertEquals("1", values.get("almanacPlantPageAfterSwitch"));
+        assertEquals("true", values.get("almanacSecondPageSlot0IsRedPeashooter"),
+                "the seed must be the first square of the page behind the retail grid");
+        assertEquals("true", values.get("almanacSelectedSeedIsRedPeashooter"),
+                "clicking that square must select it");
+        assertEquals("Red Peashooter", values.get("almanacSelectedPlantName"),
+                "the card's name comes from the mod, through Plant::GetNameString");
+        assertEquals(ContentMod.RED_PEASHOOTER_ALMANAC_DESCRIPTION, values.get("almanacSelectedPlantDescription"),
+                "the card's description comes from the mod, through the API's AlmanacMixin");
+        assertEquals("true", values.get("almanacPortraitPlaced"),
+                "the card draws a real plant for the selected seed");
+        assertEquals("true", values.get("almanacPortraitHeadReanim"),
+                "the portrait plant needs the head reanimation the game only creates for its own pea shooters");
+
+        assertEquals("true", values.get("redPeashooterPlaced"));
+        assertEquals("true", values.get("redPeashooterSeedTypeMatches"));
+        assertEquals("300", values.get("redPeashooterHealth"), "the upstream default, not overridden");
+        assertEquals("300", values.get("redPeashooterMaxHealth"));
+        assertEquals(String.valueOf(PlantSubClass.SUBCLASS_SHOOTER), values.get("redPeashooterSubclass"));
+        assertEquals("150", values.get("redPeashooterLaunchRate"));
+        assertEquals("true", values.get("redPeashooterBodyReanimLoaded"));
+        assertEquals("800", values.get("redPeashooterAttackRect").split(",")[2],
+                "the upstream shooter rectangle, got " + values.get("redPeashooterAttackRect"));
         assertEquals("800", values.get("upstreamPeashooterAttackRect").split(",")[2],
                 "the upstream peashooter keeps its own attack rectangle");
 
-        assertEquals("true", values.get("sunOrchidPlaced"));
-        assertEquals("350", values.get("sunOrchidHealth"));
-        assertEquals("350", values.get("sunOrchidMaxHealth"));
-        assertEquals("2500", values.get("sunOrchidLaunchRate"));
-        assertEquals(Integer.parseInt(values.get("sunOrchidOwnWidth")) + 24,
-                Integer.parseInt(values.get("sunOrchidRectWidth")),
-                "the orchid's collision rectangle must be 12px wider on each side");
-        assertEquals("1", values.get("sunOrchidSunsProduced"), "the orchid must drop a sun on its cadence");
-        assertEquals("1", values.get("sunOrchidCoinsAdded"), "the sun must be a real collectable coin");
-        assertEquals("1", values.get("orchidTickCallbacks"),
-                "the Sun Orchid is the plant with a tick hook, and its hook must run on every update");
-        assertEquals("3", values.get("boardPlantCount"));
+        if (assetsPresent) {
+            assertEquals("1", values.get("redPeashooterPlants"), "the placed plant must be recoloured");
+            assertEquals("26", values.get("redPeashooterRecolours"),
+                    "the 13 art-carrying tracks of the plant's body and head reanimations must be recoloured");
+            assertEquals("true", values.get("redPeashooterHeadReanim"),
+                    "the mod must give the plant the head reanimation the game only gives its own seed types");
+            assertTrue(Integer.parseInt(values.get("redPeashooterHeadAlpha")) > 0,
+                    "the red head image must hold art, got " + values.get("redPeashooterHeadAlpha"));
+            assertTrue(Integer.parseInt(values.get("redPeashooterBodyLeafAlpha")) > 0,
+                    "the red leaf image must hold art, got " + values.get("redPeashooterBodyLeafAlpha"));
+        } else {
+            assertEquals("0", values.get("redPeashooterRecolours"),
+                    "without retail .reanim data there is no track image to recolour");
+            System.out.println("[content-mod-e2e] no retail assets on this machine: the red-material "
+                    + "check was skipped");
+        }
 
-        // 5) The zombie spawns through the board's own spawner with the registered numbers, walks and
-        //    dies.
-        assertEquals("true", values.get("zombieSpawned"));
-        assertEquals("true", values.get("zombieTypeMatches"));
-        assertEquals("400", values.get("zombieBodyHealth"));
-        assertEquals("400", values.get("zombieBodyMaxHealth"));
-        assertEquals(String.valueOf(HelmType.HELMTYPE_PAIL), values.get("zombieHelmType"));
-        assertEquals("1500", values.get("zombieHelmHealth"));
-        assertEquals("0.92", values.get("zombieScale"));
-        assertEquals("70,0,20,115", values.get("zombieAttackRect"));
-        assertEquals("50,0,20,115", values.get("plainZombieAttackRect"),
-                "the plain zombie's own eating rectangle is unchanged");
-        assertEquals("true", values.get("zombieBodyReanimLoaded"));
-        assertEquals("1", values.get("zombieTorsosRecoloured"), "the recoloured torso must be applied");
-        assertEquals("true", values.get("zombieAllowedOnLevel"));
-        assertTrue(Integer.parseInt(values.get("wavesContainingModZombie")) >= 1,
-                "the mod zombie must take part in the level's waves");
-        assertEquals("true", values.get("upstreamZombieStillAllowed"));
+        // 5) The fire pea: the plant fires the projectile the mod registered.
+        if (assetsPresent) {
+            assertEquals("true", values.get("fireZombieSpawned"));
+            assertEquals("true", values.get("fireTargetFound"),
+                    "the plant must see the zombie the harness put in its lane");
+            assertEquals("1", values.get("fireProjectileCount"));
+            assertEquals(String.valueOf(ProjectileType.PROJECTILE_FIREBALL), values.get("fireProjectileTypes"),
+                    "the registered plant must fire the fire pea");
+            assertEquals("true", values.get("cachedPlantFrameSet"),
+                    "the game's plant-frame cache must hold the mod's frame for the registered seed type");
+            assertEquals("true", values.get("cachedPlantFrameIsRed"),
+                    "the cursor preview draws the cached frame, so it must be the red one");
 
-        assertTrue(Float.parseFloat(values.get("zombieWalkedDistance")) > 0.0f,
-                "the zombie must walk towards the house, walked " + values.get("zombieWalkedDistance"));
-        assertEquals("30", values.get("zombieTickCallbacks"), "the zombie's tick hook must run every tick");
-        assertEquals("1", values.get("zombieHelmRepairs"), "the pail must repair itself on its cadence");
-        assertEquals("101", values.get("zombieHelmHealthAfterTick"));
-        assertEquals("0", values.get("zombieBodyHealthAfterLethalHit"),
-                "a lethal hit must take the registered zombie's body health to zero");
-        assertEquals("true", values.get("zombieDying"),
-                "the registered zombie must enter the game's dead-or-dying state");
-        assertEquals("true", values.get("zombieDead"),
-                "the game must mark the registered zombie dead within " + values.get("zombieDeathTicks")
-                        + " ticks");
+            assertEquals(String.valueOf(ReanimationType.REANIM_FIRE_PEA), values.get("fireProjectileBodies"),
+                    "the fired pea must carry its flame body: a fireball is drawn from that reanimation, "
+                            + "without it the pea is invisible and only its shadow is left on the lawn");
+        } else {
+            System.out.println("[content-mod-e2e] no retail assets on this machine: the fire-pea check "
+                    + "was skipped (the fire path reads the reanimation's pea-head offset)");
+        }
 
-        // 6) The game is still running the level, and the harness saw no exception at all.
+        // 5b) The mid-level save the user reported about (docs/VERIFICATION.md §50): the plant comes
+        //     back with its red art rebuilt - the save carries the reanimations but not the mod's
+        //     per-track image overrides, so the API's onRestored dispatch is what repaints it - and it
+        //     still fires its fire pea. The load must also not heal the injured plant.
+        assertEquals("true", values.get("reloadSavedPlantPlaced"));
+        assertEquals("true", values.get("reloadSaved"), "the mid-level save must be written");
+        assertEquals("true", values.get("reloadLoaded"), "a fresh board must load that save");
+        assertEquals("true", values.get("reloadPlantFound"),
+                "the registered plant must survive the save/load round trip");
+        assertEquals("111", values.get("reloadHealth"),
+                "a load must not re-apply the registration's health over an injured plant");
+        if (assetsPresent) {
+            assertEquals("13", values.get("reloadTracksRepainted"),
+                    "the restored plant's body tracks must be repainted, got "
+                            + values.get("reloadTracksRepainted"));
+            assertEquals("13", values.get("reloadHeadRepainted"),
+                    "the restored plant's head tracks must be repainted, got "
+                            + values.get("reloadHeadRepainted"));
+            assertEquals("true", values.get("reloadZombieSpawned"));
+            assertEquals(String.valueOf(ProjectileType.PROJECTILE_FIREBALL), values.get("reloadFireProjectileTypes"),
+                    "the restored plant must still fire the fire pea");
+        } else {
+            assertEquals("0", values.get("reloadTracksRepainted"),
+                    "without retail .reanim data there is no track image to repaint");
+            assertEquals("0", values.get("reloadHeadRepainted"));
+            System.out.println("[content-mod-e2e] no retail assets on this machine: the restored-art "
+                    + "check was skipped");
+        }
+
+        // 6) The two plants added next to the Red Peashooter: their unlock gates, their multi-shot
+        //    volleys and their red art.
+        assertEquals("true", values.get("redRepeaterLockedBefore"),
+                "a first-time player has neither the Repeater's award nor the red twin");
+        assertEquals("true", values.get("redGatlingLockedBefore"));
+        assertEquals("true", values.get("repeaterAvailableAfterAdventure"));
+        assertEquals("true", values.get("redRepeaterUnlockedAfterAdventure"),
+                "obtaining the Repeater must unlock the red twin");
+        assertEquals("true", values.get("redGatlingStillLocked"),
+                "the adventure's award must not unlock the shop-gated twin");
+        assertEquals("true", values.get("gatlingAvailableAfterPurchase"));
+        assertEquals("true", values.get("redGatlingUnlockedAfterPurchase"),
+                "buying the shop's Gatling Pea must unlock the red twin");
+
+        if (assetsPresent) {
+            assertEquals("true", values.get("redPeashooterVolleyPlaced"));
+            assertEquals("1", values.get("redPeashooterVolleyProjectiles"),
+                    "the peashooter twin fires one pea per volley");
+            assertEquals("true", values.get("redRepeaterVolleyPlaced"));
+            assertEquals("true", values.get("redRepeaterVolleyTargetFound"));
+            assertEquals("2", values.get("redRepeaterVolleyProjectiles"),
+                    "the repeater twin fires two peas per volley, got "
+                            + values.get("redRepeaterVolleyProjectiles"));
+            assertEquals("true", values.get("redGatlingVolleyPlaced"));
+            assertEquals("true", values.get("redGatlingVolleyTargetFound"));
+            assertEquals("4", values.get("redGatlingVolleyProjectiles"),
+                    "the gatling twin fires four peas per volley, got "
+                            + values.get("redGatlingVolleyProjectiles"));
+            assertEquals(fireballList(1), values.get("redPeashooterVolleyProjectileTypes"));
+            assertEquals(fireballList(2), values.get("redRepeaterVolleyProjectileTypes"));
+            assertEquals(fireballList(4), values.get("redGatlingVolleyProjectileTypes"));
+
+            // The red art of the two new plants: their retail reanimation tracks were recoloured and
+            // the game's cached frame for each registered seed type is the red one.
+            assertEquals("true", values.get("redRepeaterPlaced"));
+            assertEquals("true", values.get("redGatlingPlaced"));
+            assertEquals("true", values.get("redRepeaterHeadReanim"),
+                    "the mod must give the repeater twin the head reanimation too");
+            assertEquals("true", values.get("redGatlingHeadReanim"));
+            assertEquals("true", values.get("redRepeaterHeadleafOverride"),
+                    "the repeater's headleaf tracks must be recoloured");
+            assertEquals("true", values.get("redRepeaterHeadleafRed"),
+                    "the recoloured headleaf must be red");
+            assertEquals("true", values.get("redGatlingBarrelOverride"),
+                    "the gatling pea's barrel tracks must be recoloured");
+            assertEquals("true", values.get("redGatlingFaceRed"),
+                    "the recoloured head must be red");
+            assertTrue(Integer.parseInt(values.get("redRepeaterBodyTracks")) > 0);
+            assertTrue(Integer.parseInt(values.get("redRepeaterHeadTracks")) > 0);
+            assertTrue(Integer.parseInt(values.get("redGatlingBodyTracks")) > 0);
+            assertTrue(Integer.parseInt(values.get("redGatlingHeadTracks")) > 0);
+            assertEquals("true", values.get("redRepeaterCachedFrameSet"));
+            assertEquals("true", values.get("redRepeaterCachedFrameIsRed"));
+            assertEquals("true", values.get("redGatlingCachedFrameSet"));
+            assertEquals("true", values.get("redGatlingCachedFrameIsRed"));
+
+            // The icons are each twin's own packet art, pixel for pixel, recoloured.
+            assertEquals(values.get("redRepeaterRetailOpaquePixels"), values.get("redRepeaterPacketOpaquePixels"),
+                    "the repeater twin's icon must paint exactly the retail repeater's packet pixels");
+            assertEquals("100", values.get("redRepeaterPacketMaskAgreementPercent"));
+            assertEquals(values.get("redGatlingRetailOpaquePixels"), values.get("redGatlingPacketOpaquePixels"),
+                    "the gatling twin's icon must paint exactly the retail gatling pea's packet pixels");
+            assertEquals("100", values.get("redGatlingPacketMaskAgreementPercent"));
+            assertTrue(Integer.parseInt(values.get("redRepeaterPacketRecolouredPixels")) > 200,
+                    "the repeater twin's icon must be recoloured");
+            assertTrue(Integer.parseInt(values.get("redGatlingPacketRecolouredPixels")) > 200,
+                    "the gatling twin's icon must be recoloured");
+        } else {
+            System.out.println("[content-mod-e2e] no retail assets on this machine: the volley and red-art "
+                    + "checks for the two new plants were skipped");
+        }
+
+        // 7) Planting an upgrade (docs/VERIFICATION.md §54): the mod's red gatling pea is the red
+        //    repeater's upgrade, exactly like the shop's gatling pea is the retail repeater's - and it
+        //    upgrades the retail repeater too, since it is that plant's red twin. The retail pair runs
+        //    first as the control: the same game path with the same two questions, so a harness that
+        //    faked the planting instead of driving Board::MouseDown would fail there as well.
+        assertEquals("true", values.get("retailGatlingOnRetailRepeaterPlaced"));
+        assertEquals("true", values.get("retailGatlingOnRetailRepeaterUpgradable"),
+                "the shop's gatling pea upgrades a retail repeater - the game's own hard-coded pair");
+        assertEquals("PLANTING_OK", values.get("retailGatlingOnRetailRepeaterCanPlant"));
+        assertEquals("true", values.get("retailGatlingReplacesRetailRepeater"),
+                "the retail pair must plant through the game's own path, replacing the repeater");
+
+        assertEquals("true", values.get("redGatlingOnRedRepeaterPlaced"));
+        assertEquals("true", values.get("redGatlingOnRedRepeaterUpgradable"),
+                "the red gatling pea must upgrade the red repeater - the user's report");
+        assertEquals("PLANTING_OK", values.get("redGatlingOnRedRepeaterCanPlant"),
+                "the red repeater's square must take the red gatling pea");
+        assertEquals(values.get("redGatlingSeedType"),
+                values.get("redGatlingReplacesRedRepeaterSeedType"),
+                "the square must hold the red gatling pea the mod registered");
+        assertEquals("true", values.get("redGatlingReplacesRedRepeater"),
+                "planting the red gatling pea must replace the red repeater with it");
+        assertEquals("true", values.get("redGatlingReplacesRedRepeaterOriginalDead"),
+                "the replaced red repeater must be gone");
+
+        assertEquals("true", values.get("redGatlingOnRetailRepeaterPlaced"));
+        assertEquals("true", values.get("redGatlingOnRetailRepeaterUpgradable"),
+                "the red gatling pea is the retail repeater's red twin, so it upgrades it too");
+        assertEquals("PLANTING_OK", values.get("redGatlingOnRetailRepeaterCanPlant"));
+        assertEquals("true", values.get("redGatlingReplacesRetailRepeater"));
+
+        assertEquals("PLANTING_NEEDS_UPGRADE", values.get("redGatlingOnEmptySquareCanPlant"),
+                "an upgrade seed needs the plant it upgrades");
+        assertEquals("PLANTING_NEEDS_UPGRADE", values.get("retailGatlingOnEmptySquareCanPlant"),
+                "the retail gatling pea's own behaviour on an empty square");
+        assertEquals("true", values.get("redGatlingOnEmptySquareStaysEmpty"),
+                "the game must refuse to plant an upgrade seed on an empty square");
+
+        // 8) The game is still running the level, and the harness saw no exception at all.
         assertEquals("PLAYING", values.get("scene"));
         assertEquals("none", values.get("harnessError"));
     }
 
-    /** The jar a player drops into {@code mods/} must carry the metadata, the code, the mixin and the art. */
+    /** @return {@code theCount} fire-pea projectile-type values, comma separated, as the harness reports */
+    private static String fireballList(int theCount) {
+        return String.join(",", java.util.Collections.nCopies(theCount,
+                String.valueOf(ProjectileType.PROJECTILE_FIREBALL)));
+    }
+
+    /**
+     * Asserts that the packet of a registered plant paints about as many pixels as its retail twin's
+     * own packet. The mod's icon is the twin's packet art re-mapped and it is drawn 1:1, so the same
+     * mask comes out; the tolerance is what an upgrade packet's own background could add.
+     */
+    private static void assertPacketOpaqueNear(Map<String, String> values, String theRed, String theRetail) {
+        int aRed = Integer.parseInt(values.get(theRed + "PacketOpaquePixels"));
+        int aRetail = Integer.parseInt(values.get(theRetail + "PacketOpaquePixels"));
+        double aDifference = Math.abs(aRed - aRetail) / (double) Math.max(aRetail, 1);
+        assertTrue(aDifference <= 0.05,
+                theRed + "'s packet must paint the pixels " + theRetail + "'s does, got " + aRed + " vs "
+                        + aRetail);
+    }
+
+    /** The jar a player drops into {@code mods/} must carry the metadata and the code, and no mechanism. */
     private void assertModJarContents(Path modJar) throws IOException {
         Set<String> entries;
         try (JarFile jar = new JarFile(modJar.toFile())) {
@@ -240,14 +490,19 @@ class ContentModEndToEndTest {
         }
 
         assertTrue(entries.contains("fabric.mod.json"), "the jar must carry fabric.mod.json, got " + entries);
-        assertTrue(entries.contains("pvz-content-mod.mixins.json"), "the jar must carry the mixin config");
         assertTrue(entries.contains("cn/enaium/fabricpvz/contentmod/ContentMod.class"), "the entry point class");
-        assertTrue(entries.contains("cn/enaium/fabricpvz/contentmod/ContentModAssets.class"));
-        assertTrue(entries.contains("cn/enaium/fabricpvz/contentmod/mixin/ResourcesMixin.class"));
-        assertTrue(entries.contains("assets/pvz-content-mod/textures/packet_sniper_pea.png"),
-                "the generated packet art must ship in the jar");
-        assertTrue(entries.contains("assets/pvz-content-mod/textures/packet_sun_orchid.png"));
-        assertTrue(entries.contains("assets/pvz-content-mod/textures/zombie_torso.png"));
+        assertTrue(entries.contains("cn/enaium/fabricpvz/contentmod/RedPlantsArt.class"), "the art choice");
+        assertTrue(entries.stream().noneMatch(name -> name.endsWith(".mixins.json")),
+                "the mod ships no Mixin any more: the api-resource module owns that mechanism, got " + entries);
+        assertTrue(entries.stream().noneMatch(name -> name.startsWith("cn/enaium/fabricpvz/contentmod/mixin/")),
+                "the mod carries no Mixin class any more, got " + entries);
+
+        // The art is not shipped as a file: the packet icon is the game's own peashooter packet art
+        // rendered and re-mapped at runtime, so the jar carries no textures at all. That is what keeps
+        // the icon from drifting from the plant (a hand-rendered PNG would, see
+        // {@code docs/VERIFICATION.md} §46).
+        assertTrue(entries.stream().noneMatch(name -> name.startsWith("assets/")),
+                "the mod ships no art files, got " + entries);
     }
 
     /**

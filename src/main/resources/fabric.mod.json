@@ -1,9 +1,9 @@
 {
   "schemaVersion": 1,
   "id": "pvz-content-mod",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "name": "PvZ Content Mod",
-  "description": "Two custom plants (Sniper Pea, Sun Orchid) and one custom zombie (Bulwark Zombie), registered through the pvz-fabric content API with their own stats, packet art and behaviour hooks.",
+  "description": "Three red plants: a Red Peashooter (175 sun, one fire pea, unlocked with the Snow Pea), a Red Repeater (225 sun, two peas per volley, unlocked with the Repeater) and a Red Gatling Pea (275 sun, four peas per volley, unlocked by buying the shop's Gatling Pea) - registered through the pvz-fabric content API and drawn with the game's own retail art recoloured red, on the lawn and on their seed packets alike. It uses api-plant to register and api-resource to place and keep the art.",
   "authors": [
     "PvZ Fabric"
   ],
@@ -14,9 +14,6 @@
       "cn.enaium.fabricpvz.contentmod.ContentMod"
     ]
   },
-  "mixins": [
-    "pvz-content-mod.mixins.json"
-  ],
   "depends": {
     "java": ">=25",
     "fabricloader": ">=0.19.0",
@@ -24,6 +21,7 @@
     "api-base": ">=1.0.0",
     "api-events": ">=1.0.0",
     "api-plant": ">=1.0.0",
+    "api-resource": ">=1.0.0",
     "api-zombie": ">=1.0.0"
   }
 }

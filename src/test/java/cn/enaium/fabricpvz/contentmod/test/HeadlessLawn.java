@@ -5,6 +5,7 @@ import cn.enaium.fabricpvz.portable.lawn.ReanimationType;
 import cn.enaium.fabricpvz.portable.lawn.Resources;
 import cn.enaium.fabricpvz.portable.lawn.ZenGarden;
 import cn.enaium.fabricpvz.portable.lawn.system.Music;
+import cn.enaium.fabricpvz.portable.lawn.system.ReanimatorCache;
 import cn.enaium.fabricpvz.portable.lawn.system.ProfileMgr;
 import cn.enaium.fabricpvz.portable.pvzp.PvzpResourceManager;
 import cn.enaium.fabricpvz.portable.pvzp.fx.EffectSystem;
@@ -72,6 +73,13 @@ public final class HeadlessLawn {
         }
         if (theApp.mSoundSystem == null) {
             theApp.mSoundSystem = new PvzpFoley();
+        }
+
+        if (theApp.mReanimatorCache == null) {
+            // LawnApp::Init creates it (LawnApp.cpp:1178-1179): the cached seed/mower/zombie frames
+            // the seed packets, the almanac and the zen garden draw from.
+            theApp.mReanimatorCache = new ReanimatorCache();
+            theApp.mReanimatorCache.reanimatorCacheInitialize();
         }
 
         PvzpFoley.pvzpFoleyInitialize(PvzpFoley.gLawnFoleyParamArray, PvzpFoley.gLawnFoleyParamArray.length);
