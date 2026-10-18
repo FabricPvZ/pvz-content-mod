@@ -6,7 +6,7 @@ Peashooter, the Red Repeater and the Red Gatling Pea - registered through the pu
 instead of implementing the mechanism itself.
 
 It is a plain Fabric mod: `fabric.mod.json`, a `ModInitializer`, and a jar that is loaded from
-`<gamedir>/mods` by the real Fabric Loader through `cn.enaium.fabricpvz:fabric-provider` (the
+`<gamedir>/mods` by the real Fabric Loader through the game provider the game jar itself carries (`cn.enaium.fabricpvz.provider`, the
 loader's `GameProvider` for this port). **It carries no Mixin**: the packet art reaches the game
 through the paint hook `api-plant` ships (the plant's art supplier), and the per-track recolouring
 through `api-resource`'s helpers.

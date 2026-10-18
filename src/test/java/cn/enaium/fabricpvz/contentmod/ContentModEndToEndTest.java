@@ -32,7 +32,7 @@ import cn.enaium.fabricpvz.portable.lawn.SeedType;
  * <p>The test does exactly what a launcher does: it copies the <em>built mod jar</em> into a real
  * {@code mods/} directory and starts {@code net.fabricmc.loader.impl.launch.knot.KnotClient} in a
  * second JVM with the game, the loader (plus Mixin and ASM, pulled in by
- * {@code cn.enaium.fabricpvz:fabric-provider}) and the API modules on the class path. The loader
+ * the game jar carries) and the API modules on the class path. The loader
  * finds the game through the provider's {@code GameProvider}, resolves the mod, runs its
  * {@code ModInitializer}, applies the API modules' Mixin configurations and only then calls the game entry point
  * - which this test redirects to {@link cn.enaium.fabricpvz.contentmod.test.ContentModGameMain} with
