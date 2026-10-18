@@ -381,7 +381,7 @@ public final class ContentModGameMain {
         // The icon the mod built: the retail peashooter's own packet art with its colours re-mapped
         // (GameArt.packetArt is what the mod renders it from, at that seed's own placement). Comparing
         // the two masks proves the icon depicts the peashooter and nothing else - which is what a
-        // hand-rendered copy of it got wrong once (docs/VERIFICATION.md §46) - and the changed-pixel
+        // hand-rendered copy of it got wrong once (../verification/VERIFICATION.md §46) - and the changed-pixel
         // count proves it was recoloured.
         Image aPacket = RedPlantsArt.packetImage(ContentMod.PEASHOOTER_ID);
         int[] aCompared = compareWithRetailArt(aPacket, SeedType.SEED_PEASHOOTER);
@@ -890,7 +890,7 @@ public final class ContentModGameMain {
         // The card's portrait is a real Plant the almanac builds for the selected seed. Its head is a
         // second reanimation the game creates only for its own pea shooters, so the mod has to supply it
         // here as well - without it the portrait shows leaves and stalk and no head, the same way the
-        // cursor preview did (docs/VERIFICATION.md §48).
+        // cursor preview did (../verification/VERIFICATION.md §48).
         Plant aPortrait = aAlmanac.mPlant;
         report("almanacPortraitPlaced", aPortrait != null);
         report("almanacPortraitHeadReanim",
@@ -949,7 +949,7 @@ public final class ContentModGameMain {
 
         // The fired pea carries its body: a fireball is drawn from the reanimation the game attaches
         // (Projectile::Draw has no image for the type, only a shadow), and this is the assertion that
-        // a directly fired one is not just a shadow on the lawn - the bug docs/VERIFICATION.md §46
+        // a directly fired one is not just a shadow on the lawn - the bug ../verification/VERIFICATION.md §46
         // records.
         StringBuilder aBody = new StringBuilder();
         for (Projectile aProjectile : aBoard.mProjectiles) {
@@ -1112,7 +1112,7 @@ public final class ContentModGameMain {
      * board is created or ticked, which is where the player picks seeds. The mod's icon is therefore
      * only reachable through the art supplier the plants were registered with; a mechanism that
      * builds it from a tick hook shows the packet background and the cost here and nothing else - the
-     * bug of {@code docs/VERIFICATION.md} §53.
+     * bug of {@code ../verification/VERIFICATION.md} §53.
      *
      * <p>The number that matters is the red one: the retail peashooter family is green, so a packet
      * that shows this mod's art has red where the retail one has none - and the background is a

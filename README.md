@@ -100,7 +100,8 @@ peas, and the seed chooser's/almanac's extra page. The red gatling pea is the on
 with the purple upgrade packet. The burst is the one thing a registered shooting
 plant has to declare: the game hard-codes the multi-shot timing on its own seed types
 (`Plant::FindTargetAndFire`, `UpdateShooter`, `UpdateShooting`), so without `.burst(n)` a registered
-plant fires a single pea. See `docs/guide/content.md`, "连发：`.burst(int)`".
+plant fires a single pea. See the mod development site (`../docs/`), chapter *Plants and zombies*,
+burst section.
 
 ## How the content is registered
 
@@ -168,7 +169,7 @@ on its twin's seed packet, rendered into a blank packet-sized image by `GameArt.
 (it calls `SeedPacket#seedPacketDrawSeed` with that seed's own packet placement, e.g. (5, 9) for the
 peashooter and repeater and (2, 9) for the gatling pea) and then re-mapped to red by this mod. The jar
 therefore carries no textures at all, and an icon cannot depict a different plant than the one on the
-lawn - a hand-rendered copy of the retail art could, and one did (`docs/VERIFICATION.md` §46).
+lawn - a hand-rendered copy of the retail art could, and one did (`../verification/VERIFICATION.md` §46).
 
 What this mod chooses, and where it comes from:
 
@@ -192,7 +193,7 @@ What the API modules do with those choices, so the mod does not have to:
   means "not built yet" and the game draws the packet itself. That is what makes the icon survive
   everything the game does to its own resource table, and what makes it appear in the seed chooser -
   where no tick ever runs, so a mechanism that only retried from a tick hook would show the plain
-  packet background there (`docs/VERIFICATION.md` §53).
+  packet background there (`../verification/VERIFICATION.md` §53).
 * **the cached plant frame** - the cursor preview and the zen garden draw
   `ReanimatorCache#mPlantImages[seedType]`, which the game builds from the reanimation and therefore
   does not know about the per-plant recolouring. `GameArt.cachedPlantFrame` +
@@ -220,7 +221,7 @@ bundles them, they come from the installation at runtime. They are not declared 
 project's whole build file is the toolchain plugin plus its coordinates:
 
 ```kotlin
-plugins { id("cn.enaium.fabricpvz.loom") version "1.0.1" }
+plugins { id("cn.enaium.fabricpvz.loom") version "1.0.5" }
 group = "cn.enaium.fabricpvz"
 version = "1.1.0"
 ```

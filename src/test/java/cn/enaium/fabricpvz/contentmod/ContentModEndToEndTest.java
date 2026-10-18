@@ -159,7 +159,7 @@ class ContentModEndToEndTest {
 
         // 3) The mod's art, drawn at the seed chooser's moment: the icon is the retail twin's packet
         //    art re-mapped to red, it reaches the game through the plants' art supplier, and the game
-        //    really draws it - with no board and no tick behind it (docs/VERIFICATION.md §53).
+        //    really draws it - with no board and no tick behind it (../verification/VERIFICATION.md §53).
         assertEquals("none", values.get("assetLoadError"));
 
         // The purple (upgrade) packet is the game's own reaction to Plant::IsUpgrade, which the API's
@@ -318,7 +318,7 @@ class ContentModEndToEndTest {
                     + "was skipped (the fire path reads the reanimation's pea-head offset)");
         }
 
-        // 5b) The mid-level save the user reported about (docs/VERIFICATION.md §50): the plant comes
+        // 5b) The mid-level save the user reported about (../verification/VERIFICATION.md §50): the plant comes
         //     back with its red art rebuilt - the save carries the reanimations but not the mod's
         //     per-track image overrides, so the API's onRestored dispatch is what repaints it - and it
         //     still fires its fire pea. The load must also not heal the injured plant.
@@ -419,7 +419,7 @@ class ContentModEndToEndTest {
                     + "checks for the two new plants were skipped");
         }
 
-        // 7) Planting an upgrade (docs/VERIFICATION.md §54): the mod's red gatling pea is the red
+        // 7) Planting an upgrade (../verification/VERIFICATION.md §54): the mod's red gatling pea is the red
         //    repeater's upgrade, exactly like the shop's gatling pea is the retail repeater's - and it
         //    upgrades the retail repeater too, since it is that plant's red twin. The retail pair runs
         //    first as the control: the same game path with the same two questions, so a harness that
@@ -500,7 +500,7 @@ class ContentModEndToEndTest {
         // The art is not shipped as a file: the packet icon is the game's own peashooter packet art
         // rendered and re-mapped at runtime, so the jar carries no textures at all. That is what keeps
         // the icon from drifting from the plant (a hand-rendered PNG would, see
-        // {@code docs/VERIFICATION.md} §46).
+        // {@code ../verification/VERIFICATION.md} §46).
         assertTrue(entries.stream().noneMatch(name -> name.startsWith("assets/")),
                 "the mod ships no art files, got " + entries);
     }
