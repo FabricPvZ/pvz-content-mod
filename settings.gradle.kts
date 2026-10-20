@@ -1,13 +1,10 @@
 pluginManagement {
     repositories {
-        // The mod toolchain plugin (cn.enaium.fabricpvz.loom) comes from the Gradle Plugin Portal,
-        // which serves the version this build states (1.0.4, via `(cd ../loom && ./gradlew
-        // publishPlugins)`).
+        // The mod toolchain plugin (cn.enaium.fabricpvz.loom) comes from the Gradle Plugin Portal.
+        // mavenLocal comes after it as the fallback for 1.0.14, which the portal does not serve yet:
+        // `(cd ../loom && ./gradlew publishToMavenLocal)` publishes it there. A version the portal
+        // serves always resolves from the portal, so the fallback can be dropped once 1.0.14 is on it.
         gradlePluginPortal()
-        // An optional fallback, deliberately *after* the portal: a version the portal does not serve
-        // yet - one built from a local checkout with `(cd ../loom && ./gradlew publishToMavenLocal)` -
-        // can still be resolved from mavenLocal. A version the portal does serve, 1.0.4 among them,
-        // always resolves from the portal and never from here.
         mavenLocal()
         mavenCentral()
     }
@@ -15,11 +12,11 @@ pluginManagement {
 
 dependencyResolutionManagement {
     repositories {
-        mavenLocal()
+        // Online only: the API this mod may declare is on Maven Central
+        // (cn.enaium.fabricpvz:fabric-api), and so is every library the version manifest names.
         mavenCentral()
-        // The API modules and the loader resolve net.fabricmc:fabric-loader and
-        // net.fabricmc:sponge-mixin from Fabric's maven (neither is on Maven Central); the API's own
-        // event bus is in-tree.
+        // Fabric Loader, Mixin and fabric-language-kotlin resolve from Fabric's maven (none of them
+        // is on Maven Central).
         maven {
             name = "Fabric"
             url = uri("https://maven.fabricmc.net/")
