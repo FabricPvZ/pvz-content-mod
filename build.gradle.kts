@@ -8,11 +8,10 @@ import org.gradle.api.tasks.bundling.Jar
 // is declared below, with the version this build was made with.
 //
 // The version is the plugin's own (every artifact of this workspace is released under its own
-// version); the plugin resolves from the Gradle Plugin Portal, with mavenLocal after it as the
-// fallback until the portal serves 1.0.14 (see settings.gradle.kts).
+// version); the plugin resolves from the Gradle Plugin Portal.
 
 plugins {
-    id("cn.enaium.fabricpvz.loom") version "1.0.14"
+    id("cn.enaium.fabricpvz.loom") version "1.0.15"
 }
 
 val fabricApi = "cn.enaium.fabricpvz:fabric-api:1.2.2"
@@ -36,15 +35,13 @@ dependencies {
 
     // The API this mod uses: the aggregate jar, whose nested jars are the five feature modules.
     // Compilation carries the modules through its POM (javac and kotlinc read jar files, not jars
-    // nested inside a jar); at runtime the aggregate alone is used, because Fabric Loader reads the
-    // nested jars out of it. `testCompileOnly` because a test source set does not inherit
-    // `compileOnly`.
-    for (configuration in listOf("compileOnly", "testCompileOnly")) {
-        add(configuration, fabricApi)
-    }
-    for (configuration in listOf("testImplementation", "pvzRunClasspath")) {
-        (add(configuration, fabricApi) as ModuleDependency).isTransitive = false
-    }
+    // nested inside a jar); `include` embeds the aggregate in this mod's jar - an installation has
+    // one jar to drop into `mods/`, because the loader reads the modules nested in it - and puts it
+    // on the run class path. `testCompileOnly` because a test source set does not inherit
+    // `compileOnly`; the end-to-end test loads the built jar, whose nested API the loader resolves.
+    compileOnly(fabricApi)
+    testCompileOnly(fabricApi)
+    include(fabricApi)
 }
 
 group = "cn.enaium.fabricpvz"

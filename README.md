@@ -240,17 +240,16 @@ keeps `mavenLocal()` after it only as a fallback for a version the portal does n
 ```
 <game directory>/            <- the directory the launcher uses as -Dpvz.gameDir
 ├── mods/
-│   ├── pvz-content-mod-1.1.0.jar
-│   └── fabric-api-1.0.0.jar   # the API: one jar, its five modules nested inside it
+│   └── pvz-content-mod-1.1.0.jar   # carries the API: META-INF/jars/fabric-api-1.2.2.jar
 └── userdata/
 ```
 
 Copy the built jar into `<gamedir>/mods` (or point Fabric Loader at another directory with
 `-Dfabric.modsFolder=<dir>`) and start the game through Fabric Loader's `KnotClient` as usual. The
 mod needs `pvz-portable`, `api-base`, `api-events`, `api-plant`, `api-resource` and `api-zombie` to be
-present; one jar provides all five API mods - `fabric-api-1.0.0.jar`, the aggregate the toolchain depends on and whose nested
-jars under `META-INF/jars/` are the modules (`loom/README.md`, "Jar-in-jar") - and `pvz-portable` is
-the game itself.
+present; one jar - this mod's own - provides all five API mods, because it carries the aggregate
+(`fabric-api-1.2.2.jar`, whose nested jars under `META-INF/jars/` are the modules; see
+`loom/README.md`, "Jar-in-jar"), and `pvz-portable` is the game itself.
 
 ## Verification
 
